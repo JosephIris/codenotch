@@ -82,6 +82,71 @@ Test("Settings and backoff survive an atomic save; corrupt files recover", () =>
         File.WriteAllText(Path.Combine(directory, "settings.json"), "broken");
         Check(State.Load<Settings>("settings.json").Edge == "Right");
     }
-    finally { Directory.Delete(directory, true); }
+    finally
+    {
+        if (!Path.GetFullPath(directory).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase)) throw new Exception("Test cleanup escaped temporary directory");
+        Directory.Delete(directory, true);
+    }
+});
+async Task TestAsync(string name, Func<Task> action)
+{
+    try { await action(); passed++; Console.WriteLine($"PASS {name}"); }
+    catch (Exception e) { Console.Error.WriteLine($"FAIL {name}: {e.Message}"); Environment.ExitCode = 1; }
+}
+Reading Sample(double percent = 15) => new("codex", "Codex", "OK", "Codex app server · live", now, [new("primary", "Weekly", percent, now.AddDays(1))]);
+await TestAsync("Successful zero usage is connected, never confused with missing data", async () =>
+{
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => Task.FromResult(Sample(0)))], persist: false);
+    await service.Refresh("codex"); var connection = service.Connections["codex"];
+    Check(connection.State == ConnectionState.Connected && connection.HasReading && connection.PercentLabel == "0%");
+});
+await TestAsync("Missing sign-in exposes a connection action and no ring", async () =>
+{
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => throw new ProviderFailure("Sign in", kind: FailureKind.NeedsSignIn))], persist: false);
+    await service.Refresh("codex"); var connection = service.Connections["codex"];
+    Check(connection.State == ConnectionState.NeedsSignIn && !connection.ShowInNotch && !connection.HasReading);
+});
+await TestAsync("Rejected authentication clears previous account readings", async () =>
+{
+    var archive = new Archive { Readings = new() { ["codex"] = Sample() } };
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => throw new ProviderFailure("Expired", kind: FailureKind.NeedsSignIn))], archive, persist: false);
+    await service.Refresh("codex"); Check(!service.Connections["codex"].HasReading && !archive.Readings.ContainsKey("codex"));
+});
+await TestAsync("Network failure retains dated reading but never claims a live connection", async () =>
+{
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => throw new HttpRequestException())], new Archive { Readings = new() { ["codex"] = Sample() } }, persist: false);
+    await service.Refresh("codex"); var connection = service.Connections["codex"];
+    Check(connection.State == ConnectionState.Error && connection.HasReading && connection.Reading!.RecordedAt == now);
+});
+await TestAsync("Persisted rate limits suppress even manual refresh", async () =>
+{
+    var calls = 0;
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => { calls++; return Task.FromResult(Sample()); })], new Archive { RetryAfter = new() { ["codex"] = DateTimeOffset.UtcNow.AddMinutes(2) } }, persist: false);
+    await service.Refresh("codex"); Check(calls == 0 && service.Connections["codex"].State == ConnectionState.RateLimited);
+});
+await TestAsync("429 never turns into a sign-in prompt", async () =>
+{
+    var archive = new Archive();
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => throw new ProviderFailure("Rate limited", 0))], archive, persist: false);
+    await service.Refresh("codex"); Check(service.Connections["codex"].State == ConnectionState.RateLimited && archive.RetryAfter["codex"] > DateTimeOffset.UtcNow.AddSeconds(50));
+});
+await TestAsync("Disabled providers never read credentials", async () =>
+{
+    var calls = 0;
+    using var service = new UsageService(new Settings { Disabled = ["codex"] }, [new Provider("codex", "Codex", "", _ => { calls++; return Task.FromResult(Sample()); })], persist: false);
+    await service.Refresh("codex"); Check(calls == 0 && service.Connections["codex"].State == ConnectionState.Disabled);
+});
+await TestAsync("Disconnect discards an in-flight reading even if the adapter ignores cancellation", async () =>
+{
+    var ready = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var response = new TaskCompletionSource<Reading>(TaskCreationOptions.RunContinuationsAsynchronously);
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => { ready.SetResult(); return response.Task; })], persist: false);
+    var fetch = service.Refresh("codex"); await ready.Task; service.Enable("codex", false); response.SetResult(Sample()); await fetch;
+    Check(service.Connections["codex"].State == ConnectionState.Disabled && !service.Connections["codex"].HasReading);
+});
+Test("A demo cache entry cannot enter live display state", () =>
+{
+    using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => Task.FromResult(Sample()))], new Archive { Readings = new() { ["codex"] = Sample() with { Source = "Demo" } } }, persist: false);
+    Check(!service.Connections["codex"].HasReading);
 });
 Console.WriteLine($"{passed} tests passed.");

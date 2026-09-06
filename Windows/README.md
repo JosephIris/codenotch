@@ -11,9 +11,15 @@ With the .NET 8 SDK installed, from the repository root:
 ./Windows/build.ps1 run      # real usage
 ```
 
-The notch starts as a small pill on the right edge. Hover to expand, hover a ring for usage windows and reset times, and click the gear or right-click for settings. The tray menu can always reopen the settings. Select any monitor and any of its four working-area edges; bottom placement sits above the taskbar. The overlay does not take keyboard focus. Only one instance runs per Windows session; quit the demo before launching live mode.
+First launch opens **Integrations**, showing which tools are connected, missing a sign-in, unreachable, or rate-limited. **Connect** checks for an existing session and opens the owning tool's sign-in or installation guide when needed. Claude Code uses `claude auth login`; Codex uses `codex login`; Cursor opens its editor. Return to Codenotch after signing in, or click **Check connection**. No passwords or API keys are entered into Codenotch.
 
-Provider switches stop subsequent credential reads and discard saved usage. An already-running request may finish, but its result is discarded after disabling. Credentials are never changed or saved by Codenotch. A five-minute polling interval and persisted rate-limit backoff apply to Refresh now as well. Last successful readings remain dimmed and explicitly stale when a fetch fails.
+The notch rests as a small black handle at the screen edge. Hover to unfold it, then hover a provider for its usage card. Move into the card without it disappearing. Click a connected ring to open its usage page, or click the animated orb below the notch for settings. The tray menu also opens settings. Starting the app again brings its settings window forward.
+
+The Windows UI now ports the upstream glyph outlines, inverse bezel corners, 44-point rings, separate percentage labels, measured spacing, and green/yellow/orange usage bands. The notch unfolds smoothly; ring readings ease to new values; hover cards fade and slide; the orb's arc becomes a rotating gear. Animations respect Windows reduced-motion settings. Choose hover-only or always-visible mode, any monitor, and any of the four working-area edges. The notch and cards do not take keyboard focus.
+
+Demo mode requires an explicit `--demo` flag (or the `demo` build task). It is labeled **DEMO** on the notch, cards, and settings, uses a separate instance identifier, and never reads or writes live account state. The old `CODENOTCH_DEMO` environment variable no longer silently changes the Windows app's mode.
+
+Disconnect stops subsequent credential reads, cancels any request in progress, and discards saved usage. A late response cannot restore a disconnected provider. Credentials are never changed or saved by Codenotch; the owning tools manage their own sign-in. Providers refresh independently every five minutes, with persisted backoff that manual refresh also respects. Rate-limited buttons count down to the next permitted attempt. Network failures keep dated, dimmed readings; rejected authentication clears the previous account's numbers. Providers without readings do not appear as invented percentages or anonymous rings.
 
 ## Provider support
 
@@ -23,11 +29,11 @@ Provider switches stop subsequent credential reads and discard saved usage. An a
 | Codex | Live `codex.exe app-server` when found in PATH, `.codex/bin`, or a PATH-based npm installation. Override with `CODENOTCH_CODEX_EXE` (absolute executable path). Falls back to the newest recorded rate-limit snapshot in local rollouts; snapshots older than five minutes are labeled stale. Respects `CODEX_HOME`. |
 | Cursor | `%APPDATA%/Cursor/User/globalStorage/state.vscdb`, read-only with WAL support, then Cursor's usage-summary endpoint. |
 | GLM | Claude settings with a Z.ai/BigModel base URL, plaintext ZCode plan credentials, or OpenCode auth under `XDG_DATA_HOME` / `~/.local/share`. Encrypted ZCode tokens are skipped. |
-| Antigravity | Not yet supported on Windows; explicitly marked in settings. |
+| Antigravity | Not yet supported on Windows. |
 
 These readers reuse the upstream response formats. The internal vendor APIs may change. An absent percentage stays unknown; it is never replaced with zero. Native Windows installations are supported; this build does not discover credentials inside WSL distributions.
 
-This first Windows version does **not** yet port session busy/waiting indicators, Antigravity, automatic updates, or launch at login. It uses drawn rings rather than the macOS provider glyphs. Live provider authentication needs validation with each installed, signed-in tool; parser tests do not establish that every account or tool version works.
+Session busy/waiting indicators, Antigravity, automatic updates, and launch at login are still not ported. The small spinner indicates a usage refresh, not an active coding session. Codex live usage was verified on the development PC. Claude's rate-limited response was verified and is surfaced correctly. Cursor and GLM sign-in flows still need validation with installed, signed-in accounts; fixture tests alone do not establish that every tool version works.
 
 Settings, last readings, and retry deadlines live in `%LOCALAPPDATA%/Codenotch/`. This directory contains no tokens. The app does not log HTTP bodies, credentials, or session content.
 
@@ -48,6 +54,18 @@ For an isolated UI startup smoke test (sample data only):
 ./Windows/Codenotch/bin/Release/net8.0-windows/Codenotch.exe --smoke-test
 ```
 
-It renders all four edge orientations to PNG files under `Windows/artifacts/smoke/` and exits automatically. Visual checks on multiple monitors and mixed DPI still need a desktop session with that hardware.
+It renders all four edges, the integrations window, a usage card, a reference scene, and several unfolding animation frames under `Windows/artifacts/smoke-v2/`, then exits automatically. CI runs this check and uploads the preview images separately from the executable packages.
+
+For actual desktop interaction checks:
+
+```powershell
+./Windows/ui-smoke.ps1
+```
+
+This launches an isolated preview, exercises the settings controls and all four edges, moves the pointer to unfold the notch, opens a provider card, crosses into it, verifies dismissal, and reopens settings through the accessible orb. It restores the pointer and exits the preview afterward. A local screenshot is saved under `Windows/artifacts/interaction/`; it may include nearby desktop content and is not uploaded by CI. Mixed-DPI multi-monitor behavior still needs validation with that hardware.
+
+`--settings` opens the integrations window on launch. The developer-only `--verify-live` switch writes a credential-free connection report and a screenshot of the live integrations window under `Windows/artifacts/live-verification/`. It performs the same authenticated reads as normal live mode and honors saved backoff. These local artifacts are ignored by Git.
+
+Regenerate the glyph asset after an upstream outline change with `node Windows/generate-glyphs.mjs`. This copies the upstream vector coordinates into a WPF-compatible path resource; it does not substitute approximated logos.
 
 Licensed under the upstream MIT license; see `../LICENSE`.

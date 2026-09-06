@@ -10,6 +10,7 @@ public sealed class Settings
     public string Edge { get; set; } = "Right";
     public string? Screen { get; set; }
     public bool AlwaysShow { get; set; }
+    public bool SetupSeen { get; set; }
     public HashSet<string> Disabled { get; set; } = [];
 }
 

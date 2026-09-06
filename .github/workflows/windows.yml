@@ -17,9 +17,19 @@ jobs:
           dotnet-version: '8.0.x'
       - run: ./Windows/build.ps1 build
       - run: ./Windows/build.ps1 test
+      - name: Render Windows UI smoke fixtures
+        shell: pwsh
+        run: |
+          $process = Start-Process ./Windows/Codenotch/bin/Release/net8.0-windows/Codenotch.exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
+          if (-not $process.WaitForExit(30000)) { Stop-Process -Id $process.Id; throw 'UI smoke test timed out' }
+          if ($process.ExitCode -ne 0) { throw "UI smoke test failed: $($process.ExitCode)" }
       - run: ./Windows/build.ps1 publish -Runtime win-x64
       - run: ./Windows/build.ps1 publish -Runtime win-arm64
       - uses: actions/upload-artifact@v4
         with:
           name: Codenotch-Windows
           path: Windows/artifacts/*.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codenotch-UI-preview
+          path: Windows/artifacts/smoke-v2/*.png

@@ -13,7 +13,11 @@ using System.Threading.Tasks;
 
 namespace Codenotch;
 
-public record Provider(string Id, string Name, string Color, Func<CancellationToken, Task<Reading>> Fetch);
+public record Provider(string Id, string Name, string Color, Func<CancellationToken, Task<Reading>> Fetch)
+{
+    public string Kind => Id.StartsWith("claude", StringComparison.Ordinal) ? "claude" : Id;
+    public string? ConfigDirectory { get; init; }
+}
 
 public sealed class Providers : IDisposable
 {
@@ -24,7 +28,7 @@ public sealed class Providers : IDisposable
     public Providers()
     {
         var claudeHome = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") ?? Path.Combine(home, ".claude");
-        All.Add(new("claude", "Claude", "#D99B7C", ct => Claude("claude", "Claude", claudeHome, ct)));
+        All.Add(new("claude", "Claude Code", "#D99B7C", ct => Claude("claude", "Claude Code", claudeHome, ct)) { ConfigDirectory = claudeHome });
         foreach (var path in Directory.EnumerateDirectories(home, ".claude-*").Order(StringComparer.OrdinalIgnoreCase))
         {
             if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(claudeHome), StringComparison.OrdinalIgnoreCase)) continue;
@@ -32,7 +36,7 @@ public sealed class Providers : IDisposable
             var slug = Path.GetFileName(path)[8..];
             var id = "claude-" + slug;
             var name = $"Claude ({slug})";
-            All.Add(new(id, name, "#D99B7C", ct => Claude(id, name, path, ct)));
+            All.Add(new(id, name, "#D99B7C", ct => Claude(id, name, path, ct)) { ConfigDirectory = path });
         }
         All.Add(new("codex", "Codex", "#84DCC6", Codex));
         All.Add(new("cursor", "Cursor", "#C1BEF5", Cursor));
@@ -47,7 +51,7 @@ public sealed class Providers : IDisposable
         if (claude) request.Headers.Add("anthropic-beta", "oauth-2025-04-20");
         using var response = await http.SendAsync(request, ct);
         if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-            throw new ProviderFailure("Sign in again in the owning tool");
+            throw new ProviderFailure("Your saved session was rejected. Sign in again in the owning tool, then check the connection.", kind: FailureKind.NeedsSignIn);
         if ((int)response.StatusCode == 429)
         {
             var retry = response.Headers.RetryAfter;
@@ -64,12 +68,12 @@ public sealed class Providers : IDisposable
     private async Task<Reading> Claude(string id, string name, string directory, CancellationToken ct)
     {
         var path = Path.Combine(directory, ".credentials.json");
-        if (!File.Exists(path)) throw new ProviderFailure("Run Claude Code and sign in first");
+        if (!File.Exists(path)) throw new ProviderFailure("No saved Claude Code login found. Connect to open Claude Code's sign-in.", kind: FailureKind.NeedsSignIn);
         var oauth = Json.Read(path).At("claudeAiOauth");
         var token = oauth.At("accessToken").Text();
-        if (string.IsNullOrWhiteSpace(token)) throw new ProviderFailure("No Claude OAuth session found");
+        if (string.IsNullOrWhiteSpace(token)) throw new ProviderFailure("No Claude OAuth session found. Sign in with your Claude subscription.", kind: FailureKind.NeedsSignIn);
         if (Json.Epoch(oauth.At("expiresAt").Number() / 1000) is { } expiry && expiry <= DateTimeOffset.UtcNow)
-            throw new ProviderFailure("Session expired · open Claude Code to refresh");
+            throw new ProviderFailure("Your Claude session expired. Open Claude Code to refresh it, then check again.", kind: FailureKind.NeedsSignIn);
         var root = await Get("https://api.anthropic.com/api/oauth/usage", "Authorization", "Bearer " + token, ct, true);
         return Result(id, name, "Claude OAuth usage", Usage.Claude(root));
     }
@@ -77,18 +81,19 @@ public sealed class Providers : IDisposable
     private async Task<Reading> Cursor(CancellationToken ct)
     {
         var db = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Cursor", "User", "globalStorage", "state.vscdb");
-        if (!File.Exists(db)) throw new ProviderFailure("Open Cursor and sign in first");
+        if (!File.Exists(db)) throw new ProviderFailure("No Cursor session found on this PC. Open Cursor and sign in, then check again.", kind: FailureKind.NeedsSignIn);
         var token = Sqlite.Query(db, "SELECT value FROM ItemTable WHERE key = 'cursorAuth/accessToken'").FirstOrDefault();
         var account = Sqlite.Query(db, "SELECT value FROM ItemTable WHERE key = 'cursorAuth/stripeMembershipAuthId'").FirstOrDefault();
-        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(account)) throw new ProviderFailure("No readable Cursor session found");
+        if (string.IsNullOrWhiteSpace(token) || string.IsNullOrWhiteSpace(account)) throw new ProviderFailure("Cursor is installed but has no readable signed-in session.", kind: FailureKind.NeedsSignIn);
         var root = await Get("https://cursor.com/api/usage-summary", "Cookie", $"WorkosCursorSessionToken={account}::{token}", ct);
-        return Result("cursor", "Cursor", "Cursor usage summary", Usage.Cursor(root));
+        var email = Sqlite.Query(db, "SELECT value FROM ItemTable WHERE key = 'cursorAuth/cachedEmail'").FirstOrDefault();
+        return Result("cursor", "Cursor", "Cursor usage summary", Usage.Cursor(root)) with { Account = email };
     }
 
     private async Task<Reading> Glm(CancellationToken ct)
     {
         var credential = GlmCredential();
-        if (credential == null) throw new ProviderFailure("No GLM key found in Claude Code, ZCode, or OpenCode");
+        if (credential == null) throw new ProviderFailure("Set up your GLM Coding Plan in Claude Code, ZCode, or OpenCode, then check again.", kind: FailureKind.NeedsSignIn);
         var (token, host) = credential.Value;
         var root = await Get(host + "/api/monitor/usage/quota/limit", "Authorization", token, ct);
         return Result("glm", "GLM", "GLM Coding Plan monitor", Usage.Glm(root));
@@ -181,7 +186,7 @@ public sealed class Providers : IDisposable
             }
             catch (IOException) { }
         }
-        return newest ?? throw new ProviderFailure("Use Codex once to record usage on this PC");
+        return newest ?? throw new ProviderFailure("No Codex usage found. Sign in to Codex with your ChatGPT account, then check again.", kind: FailureKind.NeedsSignIn);
     }
 
     private static string? FindCodex(string codexHome)

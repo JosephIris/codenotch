@@ -8,10 +8,15 @@ using System.Text.Json;
 namespace Codenotch;
 
 public record LimitWindow(string Id, string Label, double Percent, DateTimeOffset? ResetsAt);
-public record Reading(string Id, string Name, string Status, string Source, DateTimeOffset? RecordedAt, List<LimitWindow> Windows);
-public sealed class ProviderFailure(string message, double? retrySeconds = null) : Exception(message)
+public record Reading(string Id, string Name, string Status, string Source, DateTimeOffset? RecordedAt, List<LimitWindow> Windows)
+{
+    public string? Account { get; init; }
+}
+public enum FailureKind { Error, NeedsSignIn, NotInstalled, RateLimited, Unsupported }
+public sealed class ProviderFailure(string message, double? retrySeconds = null, FailureKind kind = FailureKind.Error) : Exception(message)
 {
     public double? RetrySeconds { get; } = retrySeconds;
+    public FailureKind Kind { get; } = retrySeconds != null ? FailureKind.RateLimited : kind;
 }
 
 public static class Json
@@ -109,7 +114,7 @@ public static class Usage
     public static List<LimitWindow> Glm(JsonElement root)
     {
         var code = root.At("code").Number();
-        if (code is 401 or 403) throw new ProviderFailure("Sign in to your GLM coding tool");
+        if (code is 401 or 403) throw new ProviderFailure("Sign in to your GLM coding tool", kind: FailureKind.NeedsSignIn);
         if (code == 429) throw new ProviderFailure("Rate limited", 60);
         if (root.At("success").ValueKind == JsonValueKind.False || (code != null && code != 200)) throw new ProviderFailure("GLM rejected the usage request");
         var windows = new List<LimitWindow>();
