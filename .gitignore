@@ -7,3 +7,9 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 .swiftpm/
+
+# Windows / .NET
+**/bin/
+**/obj/
+Windows/artifacts/
+.vs/

@@ -1,0 +1,25 @@
+name: Windows
+on:
+  push:
+    paths: ['Windows/**', '.github/workflows/windows.yml']
+  pull_request:
+    paths: ['Windows/**', '.github/workflows/windows.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - run: ./Windows/build.ps1 build
+      - run: ./Windows/build.ps1 test
+      - run: ./Windows/build.ps1 publish -Runtime win-x64
+      - run: ./Windows/build.ps1 publish -Runtime win-arm64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Codenotch-Windows
+          path: Windows/artifacts/*.zip

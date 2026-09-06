@@ -1,5 +1,7 @@
 # Codenotch
 
+**Windows fork:** A native Windows 10/11 app is available in [`Windows/`](Windows/README.md). Run `./Windows/build.ps1 demo` for sample data or `./Windows/build.ps1 run` for live usage. See the Windows guide for supported providers and current differences from macOS.
+
 A macOS app that pins a small black notch to a screen edge, showing how much of
 each coding assistant's usage limit you have burned — and whether it is still
 working, done, or waiting on you.
