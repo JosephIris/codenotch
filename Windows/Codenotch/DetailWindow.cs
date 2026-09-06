@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
@@ -17,6 +18,10 @@ internal sealed class DetailWindow : Window
     private readonly bool demo;
     private readonly Action settings;
     private const double CardWidth = 286;
+    private ProviderCell? anchor;
+    private Settings? placementSettings;
+    private Size desiredSize = new(CardWidth + 40, 100);
+    private bool positioning;
     public DetailWindow(bool demo, Action settings)
     {
         this.demo = demo; this.settings = settings;
@@ -26,7 +31,17 @@ internal sealed class DetailWindow : Window
         card = new Border { Width = CardWidth, Background = Brushes.Black, CornerRadius = new CornerRadius(18), Padding = new Thickness(16),
             Effect = new DropShadowEffect { Color = Colors.Black, BlurRadius = 18, ShadowDepth = 5, Opacity = .35 } };
         Canvas.SetLeft(card, 20); Canvas.SetTop(card, 20); canvas.Children.Add(card); canvas.Children.Add(tail);
-        SourceInitialized += (_, _) => NativeWindow.NonActivating(this);
+        SourceInitialized += (_, _) =>
+        {
+            NativeWindow.NonActivating(this);
+            HwndSource.FromHwnd(new WindowInteropHelper(this).Handle)?.AddHook(WindowMessage);
+        };
+    }
+    private IntPtr WindowMessage(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        // Leave DPI handling to WPF, then place the card using its updated rendering scale.
+        if (message == 0x02E0) Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(Reposition));
+        return IntPtr.Zero;
     }
     public void Update(Connection connection)
     {
@@ -60,37 +75,61 @@ internal sealed class DetailWindow : Window
             var button = Theme.Button("Manage connection →", settings); button.Margin = new Thickness(0, 14, 0, 0); panel.Children.Add(button);
         }
         card.Child = panel;
+        card.InvalidateMeasure();
         card.Measure(new Size(CardWidth, double.PositiveInfinity));
-        Height = card.DesiredSize.Height + 40;
+        desiredSize = new Size(CardWidth + 40, card.DesiredSize.Height + 40);
+        Width = desiredSize.Width; Height = desiredSize.Height;
+        if (IsVisible) Reposition();
     }
     public void ShowAt(ProviderCell cell, Settings settings)
     {
-        var point = cell.PointToScreen(new Point(22, 22));
-        var screen = NativeWindow.Screen(settings); var area = screen.WorkingArea; var scale = NativeWindow.Scale(screen);
-        var width = Width * scale; var height = Height * scale;
-        var x = settings.Edge switch { "Left" => point.X + 50 * scale, "Right" => point.X - width - 50 * scale, _ => point.X - width / 2 };
-        var y = settings.Edge switch { "Top" => point.Y + 80 * scale, "Bottom" => point.Y - height - 55 * scale, _ => point.Y - height / 2 };
-        x = Math.Clamp(x, area.Left, Math.Max(area.Left, area.Right - width)); y = Math.Clamp(y, area.Top, Math.Max(area.Top, area.Bottom - height));
+        anchor = cell; placementSettings = settings;
         if (!IsVisible) Show();
-        NativeWindow.Place(this, x, y, scale);
-        var targetX = Math.Clamp((point.X - x) / scale, 44, Width - 44);
-        var targetY = Math.Clamp((point.Y - y) / scale, 44, Height - 44);
-        var geometry = new StreamGeometry();
-        using (var path = geometry.Open())
-        {
-            if (settings.Edge == "Right") { path.BeginFigure(new Point(Width - 21, targetY - 12), true, true); path.LineTo(new Point(Width - 2, targetY), true, false); path.LineTo(new Point(Width - 21, targetY + 12), true, false); }
-            else if (settings.Edge == "Left") { path.BeginFigure(new Point(21, targetY - 12), true, true); path.LineTo(new Point(2, targetY), true, false); path.LineTo(new Point(21, targetY + 12), true, false); }
-            else if (settings.Edge == "Top") { path.BeginFigure(new Point(targetX - 12, 21), true, true); path.LineTo(new Point(targetX, 2), true, false); path.LineTo(new Point(targetX + 12, 21), true, false); }
-            else { path.BeginFigure(new Point(targetX - 12, Height - 21), true, true); path.LineTo(new Point(targetX, Height - 2), true, false); path.LineTo(new Point(targetX + 12, Height - 21), true, false); }
-        }
-        tail.Data = geometry;
+        Reposition();
         canvas.Opacity = 0; canvas.BeginAnimation(OpacityProperty, Theme.Animate(1, 180));
         var offset = new TranslateTransform(settings.Edge == "Right" ? 8 : settings.Edge == "Left" ? -8 : 0, settings.Edge == "Top" ? -8 : settings.Edge == "Bottom" ? 8 : 0);
         canvas.RenderTransform = offset; offset.BeginAnimation(TranslateTransform.XProperty, Theme.Animate(0, 240)); offset.BeginAnimation(TranslateTransform.YProperty, Theme.Animate(0, 240));
+    }
+    internal void Reposition()
+    {
+        if (positioning || !IsVisible || anchor?.IsLoaded != true || placementSettings == null) return;
+        positioning = true;
+        try
+        {
+            var screen = NativeWindow.Screen(placementSettings); var area = screen.WorkingArea;
+            var scale = NativeWindow.Prepare(this, screen);
+            var point = anchor.PointToScreen(new Point(22, 22));
+            var width = desiredSize.Width * scale; var height = desiredSize.Height * scale;
+            var x = placementSettings.Edge switch { "Left" => point.X + 50 * scale, "Right" => point.X - width - 50 * scale, _ => point.X - width / 2 };
+            var y = placementSettings.Edge switch { "Top" => point.Y + 80 * scale, "Bottom" => point.Y - height - 55 * scale, _ => point.Y - height / 2 };
+            x = Math.Clamp(x, area.Left, Math.Max(area.Left, area.Right - width)); y = Math.Clamp(y, area.Top, Math.Max(area.Top, area.Bottom - height));
+            NativeWindow.Place(this, x, y, scale, desiredSize);
+            DrawTail(placementSettings.Edge, Math.Clamp((point.X - x) / scale, 44, desiredSize.Width - 44), Math.Clamp((point.Y - y) / scale, 44, desiredSize.Height - 44));
+        }
+        finally { positioning = false; }
+    }
+    private void DrawTail(string edge, double targetX, double targetY)
+    {
+        var geometry = new StreamGeometry();
+        using (var path = geometry.Open())
+        {
+            if (edge == "Right") { path.BeginFigure(new Point(desiredSize.Width - 21, targetY - 12), true, true); path.LineTo(new Point(desiredSize.Width - 2, targetY), true, false); path.LineTo(new Point(desiredSize.Width - 21, targetY + 12), true, false); }
+            else if (edge == "Left") { path.BeginFigure(new Point(21, targetY - 12), true, true); path.LineTo(new Point(2, targetY), true, false); path.LineTo(new Point(21, targetY + 12), true, false); }
+            else if (edge == "Top") { path.BeginFigure(new Point(targetX - 12, 21), true, true); path.LineTo(new Point(targetX, 2), true, false); path.LineTo(new Point(targetX + 12, 21), true, false); }
+            else { path.BeginFigure(new Point(targetX - 12, desiredSize.Height - 21), true, true); path.LineTo(new Point(targetX, desiredSize.Height - 2), true, false); path.LineTo(new Point(targetX + 12, desiredSize.Height - 21), true, false); }
+        }
+        tail.Data = geometry;
     }
     public void Dismiss()
     {
         BeginAnimation(OpacityProperty, Theme.Animate(0, 120));
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(130) }; timer.Tick += (_, _) => { timer.Stop(); Close(); }; timer.Start();
     }
+    internal void VerifyLayout()
+    {
+        var expected = CardWidth + 40;
+        if (ActualWidth + 1 < expected || card.ActualWidth + 40 > ActualWidth + 1 || card.ActualHeight + 40 > ActualHeight + 1)
+            throw new InvalidOperationException($"Popup clipped: window {ActualWidth:0.##}x{ActualHeight:0.##}, card {card.ActualWidth:0.##}x{card.ActualHeight:0.##}, DPI {VisualTreeHelper.GetDpi(this).PixelsPerInchX:0}. Expected width {expected}.");
+    }
+    internal string LayoutInfo => $"{ActualWidth:0.##}x{ActualHeight:0.##} DIP, {VisualTreeHelper.GetDpi(this).PixelsPerInchX:0} DPI";
 }

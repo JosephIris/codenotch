@@ -21,7 +21,7 @@ jobs:
         shell: pwsh
         run: |
           $process = Start-Process ./Windows/Codenotch/bin/Release/net8.0-windows/Codenotch.exe -ArgumentList '--smoke-test' -PassThru -WindowStyle Hidden
-          if (-not $process.WaitForExit(30000)) { Stop-Process -Id $process.Id; throw 'UI smoke test timed out' }
+          if (-not $process.WaitForExit(45000)) { Stop-Process -Id $process.Id; throw 'UI smoke test timed out' }
           if ($process.ExitCode -ne 0) { throw "UI smoke test failed: $($process.ExitCode)" }
       - run: ./Windows/build.ps1 publish -Runtime win-x64
       - run: ./Windows/build.ps1 publish -Runtime win-arm64

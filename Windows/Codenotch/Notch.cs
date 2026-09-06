@@ -59,7 +59,16 @@ internal sealed class Notch : Window
             Update();
             if (!smoke && (!service.Settings.SetupSeen || showSettings)) OpenSettings();
             await service.RefreshAll();
-            if (smoke) await Smoke();
+            if (smoke)
+            {
+                try { await Smoke(); }
+                catch (Exception error)
+                {
+                    var folder = Path.Combine(Environment.CurrentDirectory, "Windows", "artifacts", "smoke-v2"); Directory.CreateDirectory(folder);
+                    File.WriteAllText(Path.Combine(folder, "failure.txt"), error.Message);
+                    Environment.ExitCode = 1; Close();
+                }
+            }
             else if (verifyLive)
             {
                 var folder = Path.Combine(Environment.CurrentDirectory, "Windows", "artifacts", "live-verification"); Directory.CreateDirectory(folder);
@@ -100,11 +109,12 @@ internal sealed class Notch : Window
     {
         if (closed || !IsLoaded) return;
         Width = surface.Width; Height = surface.Height;
-        var screen = NativeWindow.Screen(service.Settings); var area = screen.WorkingArea; var scale = NativeWindow.Scale(screen);
-        var width = Width * scale; var height = Height * scale;
+        var screen = NativeWindow.Screen(service.Settings); var area = screen.WorkingArea; var scale = NativeWindow.Prepare(this, screen);
+        var width = surface.Width * scale; var height = surface.Height * scale;
         var x = service.Settings.Edge switch { "Left" => area.Left, "Right" => area.Right - width, _ => area.Left + (area.Width - width) / 2 };
         var y = service.Settings.Edge switch { "Top" => area.Top, "Bottom" => area.Bottom - height, _ => area.Top + (area.Height - height) / 2 };
-        NativeWindow.Place(this, x, y, scale);
+        NativeWindow.Place(this, x, y, scale, new Size(surface.Width, surface.Height));
+        details?.Reposition();
     }
     private void ShowDetails(ProviderCell cell)
     {
@@ -149,7 +159,32 @@ internal sealed class Notch : Window
         Capture(this, Path.Combine(folder, "Rest.png")); surface.Expand(true);
         await System.Threading.Tasks.Task.Delay(100); Capture(this, Path.Combine(folder, "Unfold-100ms.png"));
         await System.Threading.Tasks.Task.Delay(130); Capture(this, Path.Combine(folder, "Unfold-230ms.png"));
-        await System.Threading.Tasks.Task.Delay(260); Capture(this, Path.Combine(folder, "Unfold-490ms.png")); Close();
+        await System.Threading.Tasks.Task.Delay(260); Capture(this, Path.Combine(folder, "Unfold-490ms.png"));
+        service.Settings.AlwaysShow = true;
+        var displayIndex = 0;
+        var evidence = new System.Collections.Generic.List<string>();
+        foreach (var display in Forms.Screen.AllScreens)
+        {
+            service.Settings.Screen = display.DeviceName;
+            foreach (var edge in new[] { "Right", "Bottom", "Left", "Top" })
+            {
+                service.Settings.Edge = edge; Update();
+                await System.Threading.Tasks.Task.Delay(250);
+                foreach (var cell in surface.Cells.Take(2))
+                {
+                    ShowDetails(cell);
+                    if (cell.Connection.Provider.Kind == "codex" && cell.Connection.Reading is { } reading)
+                        details!.Update(cell.Connection with { Reading = reading with { Windows = reading.Windows.Take(1).ToList() } });
+                    await System.Threading.Tasks.Task.Delay(260); details!.UpdateLayout();
+                    Capture(details, Path.Combine(folder, $"Display-{displayIndex}-{edge}-{cell.Connection.Provider.Id}.png"));
+                    details.VerifyLayout();
+                    evidence.Add($"{display.DeviceName} / {edge} / {cell.Connection.Provider.Id}: {details.LayoutInfo}");
+                }
+            }
+            displayIndex++;
+        }
+        File.WriteAllLines(Path.Combine(folder, "Dpi-layout.txt"), evidence);
+        Close();
     }
     private void CaptureScene(string path)
     {

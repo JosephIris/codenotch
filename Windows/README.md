@@ -54,7 +54,7 @@ For an isolated UI startup smoke test (sample data only):
 ./Windows/Codenotch/bin/Release/net8.0-windows/Codenotch.exe --smoke-test
 ```
 
-It renders all four edges, the integrations window, a usage card, a reference scene, and several unfolding animation frames under `Windows/artifacts/smoke-v2/`, then exits automatically. CI runs this check and uploads the preview images separately from the executable packages.
+It renders all four edges, the integrations window, a usage card, a reference scene, and several unfolding animation frames under `Windows/artifacts/smoke-v2/`. It then moves across every connected display and switches between two-window and one-window cards on every edge, asserting that the complete card fits its popup. `Dpi-layout.txt` records the measured dimensions and rendering DPI. CI runs this check and uploads the preview images separately from the executable packages.
 
 For actual desktop interaction checks:
 
@@ -62,7 +62,7 @@ For actual desktop interaction checks:
 ./Windows/ui-smoke.ps1
 ```
 
-This launches an isolated preview, exercises the settings controls and all four edges, moves the pointer to unfold the notch, opens a provider card, crosses into it, verifies dismissal, and reopens settings through the accessible orb. It restores the pointer and exits the preview afterward. A local screenshot is saved under `Windows/artifacts/interaction/`; it may include nearby desktop content and is not uploaded by CI. Mixed-DPI multi-monitor behavior still needs validation with that hardware.
+This launches an isolated preview, exercises the settings controls and all four edges, moves the pointer to unfold the notch, opens a provider card, crosses into it, verifies dismissal, and reopens settings through the accessible orb. It restores the pointer and exits the preview afterward. A local screenshot is saved under `Windows/artifacts/interaction/`; it may include nearby desktop content and is not uploaded by CI. Popup sizing has also been checked on the development PC's three-display mixed-DPI setup.
 
 `--settings` opens the integrations window on launch. The developer-only `--verify-live` switch writes a credential-free connection report and a screenshot of the live integrations window under `Windows/artifacts/live-verification/`. It performs the same authenticated reads as normal live mode and honors saved backoff. These local artifacts are ignored by Git.
 

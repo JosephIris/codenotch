@@ -1,4 +1,7 @@
-param([string]$Executable = (Join-Path $PSScriptRoot 'Codenotch/bin/Release/net8.0-windows/Codenotch.exe'))
+param(
+    [string]$Executable = (Join-Path $PSScriptRoot 'Codenotch/bin/Release/net8.0-windows/Codenotch.exe'),
+    [int]$Display = 1
+)
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, System.Drawing, System.Windows.Forms
 Add-Type @'
@@ -33,6 +36,8 @@ try {
     }
     if ($null -eq $settings) { throw 'First-launch integrations did not open' }
     Invoke-Button $settings 'Appearance'
+    $screenChoice = [System.Windows.Forms.Screen]::AllScreens[$Display - 1]
+    Invoke-Button $settings ("Display $Display" + $(if ($screenChoice.Primary) { ' · main' } else { '' }))
     foreach ($edge in @('Left', 'Top', 'Bottom', 'Right')) { Invoke-Button $settings $edge }
     Invoke-Button $settings 'On hover'
     Invoke-Button $settings 'Integrations'
