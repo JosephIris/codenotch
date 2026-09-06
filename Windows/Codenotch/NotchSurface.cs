@@ -88,8 +88,9 @@ internal sealed class NotchSurface : Canvas
         var emptyCenter = Place(length / 2, depth / 2); SetLeft(empty, emptyCenter.X - 29); SetTop(empty, emptyCenter.Y - 32);
         demoLabel.Visibility = service.IsDemo ? Visibility.Visible : Visibility.Collapsed;
         SetLeft(demoLabel, vertical ? 18 : length / 2 - 13); SetTop(demoLabel, vertical ? 32 : depth - 12);
+        UpdateGeometry();
     }
-    protected override void OnRender(DrawingContext dc)
+    private void UpdateGeometry()
     {
         var t = Math.Clamp(Reveal, 0, 1); var d = 10 + (depth - 10) * t; var l = 79 + (length - 79) * t;
         shape = NotchGeometry.Create(d, l, service.Settings.Edge);
@@ -99,8 +100,15 @@ internal sealed class NotchSurface : Canvas
             "Bottom" => new Vector((length - l) / 2, depth - d), _ => new Vector((length - l) / 2, 0)
         };
         var group = new TransformGroup(); group.Children.Add(shape.Transform); group.Children.Add(new TranslateTransform(offset.X, offset.Y)); shape.Transform = group;
-        dc.DrawGeometry(Brushes.Black, null, shape);
+        // Reveal cells through the growing bezel, never floating over the desktop mid-transition.
+        // The orb gets its own contour because it deliberately sits outside the notch body.
+        var clip = new GeometryGroup { FillRule = FillRule.Nonzero };
+        clip.Children.Add(shape);
+        if (t > .8) clip.Children.Add(new EllipseGeometry(new Point(GetLeft(orb) + 32, GetTop(orb) + 32), 32, 32));
+        if (service.IsDemo) clip.Children.Add(new RectangleGeometry(new Rect(GetLeft(demoLabel), GetTop(demoLabel), 32, 12)));
+        Clip = clip;
     }
+    protected override void OnRender(DrawingContext dc) { if (shape != null) dc.DrawGeometry(Brushes.Black, null, shape); }
     public bool InteractiveAt(Point point)
     {
         if (Reveal > .1) return shape?.FillContains(point) == true || new Rect(GetLeft(orb), GetTop(orb), 64, 64).Contains(point);
