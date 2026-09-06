@@ -30,6 +30,7 @@ internal sealed class Notch : Window
     {
         this.service = service;
         Title = service.IsDemo ? "Codenotch · DEMO PREVIEW" : "Codenotch";
+        Icon = AppBrand.Image;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; AllowsTransparency = true;
         Background = Brushes.Transparent; Topmost = true; ShowInTaskbar = false; ShowActivated = false;
         UseLayoutRounding = true;
@@ -47,7 +48,7 @@ internal sealed class Notch : Window
         };
         detailsDelay.Tick += (_, _) => { detailsDelay.Stop(); if (hovered != null) ShowDetails(hovered); };
         ContextMenu = Menu();
-        tray = new Forms.NotifyIcon { Icon = CreateTrayIcon(), Text = Title, Visible = true, ContextMenuStrip = new Forms.ContextMenuStrip() };
+        tray = new Forms.NotifyIcon { Icon = AppBrand.TrayIcon(), Text = Title, Visible = true, ContextMenuStrip = new Forms.ContextMenuStrip() };
         tray.ContextMenuStrip.Items.Add("Integrations & settings", null, (_, _) => Dispatcher.Invoke(OpenSettings));
         tray.ContextMenuStrip.Items.Add("Refresh usage", null, async (_, _) => await service.RefreshAll());
         tray.ContextMenuStrip.Items.Add("Quit Codenotch", null, (_, _) => Dispatcher.Invoke(Close));
@@ -77,21 +78,6 @@ internal sealed class Notch : Window
             CloseDetails(); settingsWindow?.Close(); tray.Visible = false; tray.Icon?.Dispose(); tray.Dispose();
         };
     }
-    private static System.Drawing.Icon CreateTrayIcon()
-    {
-        using var bitmap = new System.Drawing.Bitmap(32, 32);
-        using (var g = System.Drawing.Graphics.FromImage(bitmap))
-        {
-            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            using var track = new System.Drawing.Pen(System.Drawing.Color.FromArgb(85, 85, 85), 4);
-            using var arc = new System.Drawing.Pen(System.Drawing.Color.White, 4);
-            g.DrawEllipse(track, 5, 5, 22, 22); g.DrawArc(arc, 5, 5, 22, 22, -90, 260);
-        }
-        var handle = bitmap.GetHicon();
-        try { using var icon = System.Drawing.Icon.FromHandle(handle); return (System.Drawing.Icon)icon.Clone(); }
-        finally { DestroyIcon(handle); }
-    }
-    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool DestroyIcon(IntPtr handle);
     private IntPtr Messages(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
         if (message == 0x0084)

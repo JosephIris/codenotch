@@ -7,9 +7,15 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets/Codenotch.ico</ApplicationIcon>
+    <Product>Codenotch</Product>
+    <Title>Codenotch</Title>
+    <Description>Coding assistant usage at your screen edge.</Description>
     <Version>0.2.0</Version>
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets/glyphs.json" />
+    <EmbeddedResource Include="Assets/Codenotch.ico" />
+    <Resource Include="Assets/AppIcon.png" />
   </ItemGroup>
 </Project>

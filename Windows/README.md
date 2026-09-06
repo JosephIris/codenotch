@@ -68,4 +68,6 @@ This launches an isolated preview, exercises the settings controls and all four 
 
 Regenerate the glyph asset after an upstream outline change with `node Windows/generate-glyphs.mjs`. This copies the upstream vector coordinates into a WPF-compatible path resource; it does not substitute approximated logos.
 
+The executable, taskbar/settings window, and notification-area icon use the original full-color Codenotch artwork. `node Windows/generate-icons.mjs` packages the upstream 16/32/64/128/256-pixel images into the Windows ICO resource. Live and preview instances have separate, stable taskbar identities.
+
 Licensed under the upstream MIT license; see `../LICENSE`.

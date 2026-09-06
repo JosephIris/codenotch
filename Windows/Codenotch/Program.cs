@@ -17,6 +17,7 @@ internal static class Program
         using var activation = new EventWaitHandle(false, EventResetMode.AutoReset, preview ? "Local\\Codenotch.Windows.Preview.Show" : "Local\\Codenotch.Windows.Show");
         if (!first) { activation.Set(); return; }
         var app = new Application { ShutdownMode = ShutdownMode.OnMainWindowClose };
+        AppBrand.SetTaskbarIdentity(preview);
         app.DispatcherUnhandledException += (_, e) =>
         {
             // Only exception type/stack: provider payloads and secrets must never enter crash reports.

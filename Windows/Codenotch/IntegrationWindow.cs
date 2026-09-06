@@ -29,6 +29,7 @@ internal sealed class IntegrationWindow : Window
     {
         this.service = service; this.appearanceChanged = appearanceChanged;
         Title = service.IsDemo ? "Codenotch · Demo preview" : "Codenotch · Integrations";
+        Icon = AppBrand.Image;
         Width = 640; Height = 740; MinHeight = 540; MinWidth = 600;
         WindowStartupLocation = WindowStartupLocation.CenterScreen;
         WindowStyle = WindowStyle.None; AllowsTransparency = true; Background = Brushes.Transparent;
@@ -45,7 +46,7 @@ internal sealed class IntegrationWindow : Window
         titlebar.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 1 && e.OriginalSource is not Button) DragMove(); };
         var close = Theme.Button("✕", Close); close.Padding = new Thickness(9, 4, 9, 4); close.Background = Brushes.Transparent; close.BorderThickness = new Thickness(0); close.Foreground = Theme.Muted; DockPanel.SetDock(close, Dock.Right); titlebar.Children.Add(close);
         var brand = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        var mark = new Border { Width = 18, Height = 18, BorderBrush = Theme.Text, BorderThickness = new Thickness(3), CornerRadius = new CornerRadius(9), Margin = new Thickness(0, 0, 10, 0) };
+        var mark = new Image { Source = AppBrand.Image, Width = 24, Height = 24, Margin = new Thickness(0, 0, 10, 0) };
         brand.Children.Add(mark); brand.Children.Add(Theme.Label("codenotch", 14, Theme.Text, FontWeights.SemiBold));
         if (service.IsDemo) brand.Children.Add(new Border { Background = Theme.Brush("#382D1A"), CornerRadius = new CornerRadius(4), Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(10, 0, 0, 0), Child = Theme.Label("DEMO PREVIEW", 9, Theme.Brush("#E3C997"), FontWeights.SemiBold) });
         titlebar.Children.Add(brand); header.Children.Add(titlebar);
