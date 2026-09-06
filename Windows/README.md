@@ -23,6 +23,10 @@ Disconnect stops subsequent credential reads, cancels any request in progress, a
 
 ## Provider support
 
+The optional bridge in `Windows/streamdeck/` adapts the existing `com.anthropic.claude-usage` Stream Deck plugin. Run `./Windows/streamdeck/install.ps1`, then restart Stream Deck. It backs up the original API module, shares concurrent button requests, caches successful responses for five minutes, and persists server cooldowns and exponential backoff. It also preserves Codenotch's existing Claude cooldown on first installation.
+
+When the bridge is installed, the default `.claude` profile reads `%LOCALAPPDATA%/ClaudeUsage/streamdeck.json` without making Claude network requests. Additional profiles keep their own adapters. The cache contains usage, timestamps and a credential fingerprint, never a token. Cards identify Stream Deck as their source and retain the actual collection time. The collector continues while Stream Deck runs, even on another button profile. If Stream Deck closes, readings become stale; Codenotch does not silently start a second collector. To revert, restore `actions/claude-api.js.before-codenotch` over `actions/claude-api.js`, remove `actions/codenotch-bridge.json`, and restart both apps.
+
 | Provider | Windows source |
 | --- | --- |
 | Claude Code | `%USERPROFILE%/.claude/.credentials.json`, or `CLAUDE_CONFIG_DIR`; additional `.claude-*` profiles discovered at launch. OAuth usage endpoint. Open Claude Code to refresh expired credentials. |

@@ -17,6 +17,7 @@ jobs:
           dotnet-version: '8.0.x'
       - run: ./Windows/build.ps1 build
       - run: ./Windows/build.ps1 test
+      - run: node --test Windows/streamdeck/collector.test.mjs
       - name: Render Windows UI smoke fixtures
         shell: pwsh
         run: |

@@ -149,4 +149,22 @@ Test("A demo cache entry cannot enter live display state", () =>
     using var service = new UsageService(new Settings(), [new Provider("codex", "Codex", "", _ => Task.FromResult(Sample()))], new Archive { Readings = new() { ["codex"] = Sample() with { Source = "Demo" } } }, persist: false);
     Check(!service.Connections["codex"].HasReading);
 });
+Test("Stream Deck cache preserves timestamp, detects staleness and rejects another login", () =>
+{
+    var token = "test-only";
+    var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
+    var root = Parse(System.Text.Json.JsonSerializer.Serialize(new { version = 1, credentialHash = hash, fetchedAt = now, data = new { five_hour = new { utilization = 0 } } }));
+    var reading = ClaudeBridge.Parse(root, "claude", "Claude", token, now);
+    Check(reading.RecordedAt == now && reading.Windows[0].Percent == 0 && reading.Status == "OK");
+    Check(ClaudeBridge.Parse(root, "claude", "Claude", token, now.AddMinutes(7)).Status.StartsWith("Stale"));
+    try { ClaudeBridge.Parse(root, "claude", "Claude", "another-login", now); throw new Exception("Accepted another account"); }
+    catch (ProviderFailure e) { Check(e.Kind == FailureKind.NeedsSignIn); }
+});
+await TestAsync("Local collector remains readable during an existing network cooldown", async () =>
+{
+    var calls = 0;
+    var provider = new Provider("claude", "Claude", "", _ => { calls++; return Task.FromResult(Sample() with { Source = "Stream Deck" }); }) { UsesLocalSource = () => true };
+    using var service = new UsageService(new Settings(), [provider], new Archive { RetryAfter = new() { ["claude"] = DateTimeOffset.UtcNow.AddHours(1) } }, persist: false);
+    await service.Refresh("claude"); Check(calls == 1 && service.Connections["claude"].State == ConnectionState.Connected);
+});
 Console.WriteLine($"{passed} tests passed.");

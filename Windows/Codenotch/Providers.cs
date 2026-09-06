@@ -17,6 +17,7 @@ public record Provider(string Id, string Name, string Color, Func<CancellationTo
 {
     public string Kind => Id.StartsWith("claude", StringComparison.Ordinal) ? "claude" : Id;
     public string? ConfigDirectory { get; init; }
+    public Func<bool>? UsesLocalSource { get; init; }
 }
 
 public sealed class Providers : IDisposable
@@ -28,7 +29,7 @@ public sealed class Providers : IDisposable
     public Providers()
     {
         var claudeHome = Environment.GetEnvironmentVariable("CLAUDE_CONFIG_DIR") ?? Path.Combine(home, ".claude");
-        All.Add(new("claude", "Claude Code", "#D99B7C", ct => Claude("claude", "Claude Code", claudeHome, ct)) { ConfigDirectory = claudeHome });
+        All.Add(new("claude", "Claude Code", "#D99B7C", ct => Claude("claude", "Claude Code", claudeHome, ct)) { ConfigDirectory = claudeHome, UsesLocalSource = () => ClaudeBridge.Installed(claudeHome) });
         foreach (var path in Directory.EnumerateDirectories(home, ".claude-*").Order(StringComparer.OrdinalIgnoreCase))
         {
             if (string.Equals(Path.GetFullPath(path), Path.GetFullPath(claudeHome), StringComparison.OrdinalIgnoreCase)) continue;
@@ -72,6 +73,7 @@ public sealed class Providers : IDisposable
         var oauth = Json.Read(path).At("claudeAiOauth");
         var token = oauth.At("accessToken").Text();
         if (string.IsNullOrWhiteSpace(token)) throw new ProviderFailure("No Claude OAuth session found. Sign in with your Claude subscription.", kind: FailureKind.NeedsSignIn);
+        if (ClaudeBridge.Installed(directory)) return ClaudeBridge.Read(id, name, token);
         if (Json.Epoch(oauth.At("expiresAt").Number() / 1000) is { } expiry && expiry <= DateTimeOffset.UtcNow)
             throw new ProviderFailure("Your Claude session expired. Open Claude Code to refresh it, then check again.", kind: FailureKind.NeedsSignIn);
         var root = await Get("https://api.anthropic.com/api/oauth/usage", "Authorization", "Bearer " + token, ct, true);

@@ -65,7 +65,7 @@ public sealed class UsageService : IDisposable
     {
         if (lifetime.IsCancellationRequested || Settings.Disabled.Contains(id) || pending.ContainsKey(id)) return;
         var provider = Providers.First(p => p.Id == id);
-        if (archive.RetryAfter.TryGetValue(id, out var deadline) && deadline > DateTimeOffset.UtcNow)
+        if (provider.UsesLocalSource?.Invoke() != true && archive.RetryAfter.TryGetValue(id, out var deadline) && deadline > DateTimeOffset.UtcNow)
         {
             Set(id, ConnectionState.RateLimited, $"The service asked us to wait. Retry available at {deadline.ToLocalTime():HH:mm:ss}. Your login does not need changing.", deadline);
             return;
@@ -80,7 +80,7 @@ public sealed class UsageService : IDisposable
             if (cancellation.IsCancellationRequested || generations.GetValueOrDefault(id) != generation) return;
             var stale = result.Status.StartsWith("Stale", StringComparison.OrdinalIgnoreCase);
             Connections[id] = new(provider, stale ? ConnectionState.Stale : ConnectionState.Connected, result,
-                IsDemo ? "Preview only · sample data" : stale ? "Codex's last recorded usage. A live connection is not available." : result.Status == "OK" ? "Usage verified with your signed-in tool." : result.Status);
+                IsDemo ? "Preview only · sample data" : stale ? result.Status : result.Status == "OK" ? "Usage verified with your signed-in tool." : result.Status);
             if (!IsDemo) archive.Readings[id] = result;
             archive.RetryAfter.Remove(id); archive.Failures.Remove(id);
         }

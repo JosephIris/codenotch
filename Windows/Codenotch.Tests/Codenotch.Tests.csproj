@@ -9,6 +9,7 @@
     <Compile Include="../Codenotch/Usage.cs" Link="Usage.cs" />
     <Compile Include="../Codenotch/State.cs" Link="State.cs" />
     <Compile Include="../Codenotch/Providers.cs" Link="Providers.cs" />
+    <Compile Include="../Codenotch/ClaudeBridge.cs" Link="ClaudeBridge.cs" />
     <Compile Include="../Codenotch/UsageService.cs" Link="UsageService.cs" />
   </ItemGroup>
 </Project>
