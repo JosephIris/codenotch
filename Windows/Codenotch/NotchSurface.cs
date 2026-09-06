@@ -100,15 +100,22 @@ internal sealed class NotchSurface : Canvas
             "Bottom" => new Vector((length - l) / 2, depth - d), _ => new Vector((length - l) / 2, 0)
         };
         var group = new TransformGroup(); group.Children.Add(shape.Transform); group.Children.Add(new TranslateTransform(offset.X, offset.Y)); shape.Transform = group;
-        // Reveal cells through the growing bezel, never floating over the desktop mid-transition.
-        // The orb gets its own contour because it deliberately sits outside the notch body.
-        var clip = new GeometryGroup { FillRule = FillRule.Nonzero };
-        clip.Children.Add(shape);
-        if (t > .8) clip.Children.Add(new EllipseGeometry(new Point(GetLeft(orb) + 32, GetTop(orb) + 32), 32, 32));
-        if (service.IsDemo) clip.Children.Add(new RectangleGeometry(new Rect(GetLeft(demoLabel), GetTop(demoLabel), 32, 12)));
-        Clip = clip;
+        // Clip the visual children, not the input canvas: clipping the canvas itself
+        // also clips its wake region and prevents a resting notch receiving mouse entry.
+        foreach (var child in cells.Values.Cast<FrameworkElement>().Append(empty))
+        {
+            var slide = child.RenderTransform as TranslateTransform;
+            var clip = new GeometryGroup { FillRule = FillRule.Nonzero };
+            clip.Children.Add(shape);
+            clip.Transform = new TranslateTransform(-GetLeft(child) - (slide?.X ?? 0), -GetTop(child) - (slide?.Y ?? 0));
+            child.Clip = clip;
+        }
     }
-    protected override void OnRender(DrawingContext dc) { if (shape != null) dc.DrawGeometry(Brushes.Black, null, shape); }
+    protected override void OnRender(DrawingContext dc)
+    {
+        base.OnRender(dc);
+        if (shape != null) dc.DrawGeometry(Brushes.Black, null, shape);
+    }
     public bool InteractiveAt(Point point)
     {
         if (Reveal > .1) return shape?.FillContains(point) == true || new Rect(GetLeft(orb), GetTop(orb), 64, 64).Contains(point);
