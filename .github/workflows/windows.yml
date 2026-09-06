@@ -18,6 +18,7 @@ jobs:
       - run: ./Windows/build.ps1 build
       - run: ./Windows/build.ps1 test
       - run: node --test Windows/streamdeck/collector.test.mjs
+      - run: node --test Windows/streamdeck/codex-display.test.mjs
       - name: Render Windows UI smoke fixtures
         shell: pwsh
         run: |
